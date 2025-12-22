@@ -1,0 +1,19 @@
+{
+  "name": "peerjs-signaling-server",
+  "version": "1.0.0",
+  "description": "Servidor de sinalização para PeerJS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.22.1",
+    "peer": "^0.6.1",
+    "socket.io": "^4.8.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
