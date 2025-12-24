@@ -52,14 +52,29 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 3. Chat
-    socket.on('chat', (msg) => {
-        socket.broadcast.emit('chatMessage', { id: socket.id, msg: msg });
+    // 3. Chat (agora com suporte a isDead para chat espiritual)
+    socket.on('chat', (data) => {
+        socket.broadcast.emit('chatMessage', { 
+            id: socket.id, 
+            msg: data.msg,
+            isDead: data.isDead || false
+        });
     });
 
-    // 4. Eventos do Jogo (Start, Lanterna, etc)
+    // 4. Eventos do Jogo (Start, Lanterna, Dano, etc)
+    // Incluindo: START_MATCH, TAKE_DAMAGE, PLAYER_DIED, SPAWN_CLONE
     socket.on('gameEvent', (payload) => {
         socket.broadcast.emit('gameEvent', payload);
+    });
+
+    // 🎭 Mudança de Skin (disfarce do Hunter)
+    // O servidor só retransmite qual skin o jogador está usando
+    // NÃO revela se é Hunter ou Alien - todos veem igual
+    socket.on('skinChange', (data) => {
+        socket.broadcast.emit('skinChange', {
+            id: socket.id,
+            skinId: data.skinId
+        });
     });
 
     // 5. Tchau
