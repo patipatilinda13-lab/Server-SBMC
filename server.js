@@ -16,76 +16,227 @@ const io = new Server(server, {
     }
 });
 
-let players = {};
+// =============== SISTEMA DE SALAS ===============
+let rooms = {}; // { roomId: { name, password, players: {}, createdAt } }
+let playerRooms = {}; // { socketId: roomId }
 
+function generateRoomId() {
+    return 'room_' + Math.random().toString(36).substr(2, 9);
+}
+
+function updateRoomList() {
+    // Emite lista de salas para TODOS os clientes
+    const roomList = Object.values(rooms)
+        .filter(room => room.players.length > 0) // Só salas com players
+        .map(room => ({
+            roomId: room.id,
+            name: room.name,
+            playerCount: room.players.length,
+            hasPassword: !!room.password,
+            createdAt: room.createdAt
+        }));
+    
+    io.emit('roomList', roomList);
+}
+
+// =============== EVENTO: CREATE ROOM ===============
 io.on('connection', (socket) => {
-    console.log('Novo jogador conectado:', socket.id);
+    console.log('🔌 Novo jogador conectado:', socket.id);
 
-    // 1. Quando alguém entra
-    socket.on('join', (userData) => {
-        players[socket.id] = {
-            id: socket.id,
-            name: userData.name,
-            x: 0, y: 0, z: 0, ry: 0
+    socket.on('createRoom', (data) => {
+        const { roomName, password, nickname } = data;
+        
+        const roomId = generateRoomId();
+        const room = {
+            id: roomId,
+            name: roomName,
+            password: password || null,
+            players: [{ id: socket.id, name: nickname }],
+            createdAt: new Date()
         };
         
-        // Avisa os outros que você entrou
-        socket.broadcast.emit('playerJoined', { id: socket.id, name: userData.name });
+        rooms[roomId] = room;
+        playerRooms[socket.id] = roomId;
         
-        // Te avisa quem já estava na sala
-        socket.emit('currentPlayers', players);
+        // Socket entra na room do lado do servidor
+        socket.join(roomId);
+        
+        console.log(`✅ Sala criada: ${roomName} (${roomId}) por ${nickname}`);
+        
+        // Avisa o criador que entrou
+        socket.emit('roomCreated', {
+            roomId: roomId,
+            roomName: roomName,
+            players: room.players
+        });
+        
+        // Atualiza lista de salas para TODOS
+        updateRoomList();
     });
 
-    // 2. Quando alguém se mexe
-    socket.on('move', (data) => {
-        if (players[socket.id]) {
-            players[socket.id].x = data.x;
-            players[socket.id].y = data.y;
-            players[socket.id].z = data.z;
-            players[socket.id].ry = data.ry;
-            
-            // Manda a nova posição para todos (menos pra você mesmo)
-            socket.broadcast.emit('playerMoved', { 
-                id: socket.id, 
-                pos: data 
-            });
+    // =============== EVENTO: JOIN ROOM ===============
+    socket.on('joinRoom', (data) => {
+        const { roomId, password, nickname } = data;
+        
+        const room = rooms[roomId];
+        if (!room) {
+            socket.emit('error', 'Sala não encontrada');
+            return;
         }
+        
+        // Verifica senha
+        if (room.password && room.password !== password) {
+            socket.emit('error', 'Senha incorreta');
+            return;
+        }
+        
+        // Adiciona player à sala
+        room.players.push({ id: socket.id, name: nickname });
+        playerRooms[socket.id] = roomId;
+        
+        // Socket entra na room
+        socket.join(roomId);
+        
+        console.log(`✅ ${nickname} entrou na sala ${room.name}`);
+        
+        // Avisa pra todos na sala que alguém entrou
+        io.to(roomId).emit('playerJoined', {
+            id: socket.id,
+            name: nickname
+        });
+        
+        // Avisa o novo player quem já tá na sala
+        socket.emit('joinedRoom', {
+            roomId: roomId,
+            players: room.players,
+            roomName: room.name
+        });
+        
+        // Atualiza lista de salas
+        updateRoomList();
     });
 
-    // 3. Chat (agora com suporte a isDead para chat espiritual)
+    // =============== EVENTO: GET ROOMS ===============
+    socket.on('getRooms', () => {
+        const roomList = Object.values(rooms)
+            .filter(room => room.players.length > 0)
+            .map(room => ({
+                roomId: room.id,
+                name: room.name,
+                playerCount: room.players.length,
+                hasPassword: !!room.password,
+                createdAt: room.createdAt
+            }));
+        
+        socket.emit('roomList', roomList);
+    });
+
+    // =============== EVENTO: JOIN GAME ===============
+    socket.on('join', (userData) => {
+        const roomId = playerRooms[socket.id];
+        if (!roomId) return;
+        
+        const room = rooms[roomId];
+        if (!room) return;
+        
+        // Atualiza dados do player
+        const player = room.players.find(p => p.id === socket.id);
+        if (player) {
+            player.x = 0;
+            player.y = 0;
+            player.z = 0;
+            player.ry = 0;
+        }
+        
+        // Emite para TODA A SALA
+        io.to(roomId).emit('playerJoined', { id: socket.id, name: userData.name });
+        socket.emit('currentPlayers', room.players);
+    });
+
+    // =============== EVENTO: MOVE ===============
+    socket.on('move', (data) => {
+        const roomId = playerRooms[socket.id];
+        if (!roomId) return;
+        
+        const room = rooms[roomId];
+        if (!room) return;
+        
+        const player = room.players.find(p => p.id === socket.id);
+        if (player) {
+            player.x = data.x;
+            player.y = data.y;
+            player.z = data.z;
+            player.ry = data.ry;
+        }
+        
+        // Manda posição para TODA A SALA (menos pra você)
+        socket.to(roomId).emit('playerMoved', {
+            id: socket.id,
+            pos: data
+        });
+    });
+
+    // =============== EVENTO: CHAT ===============
     socket.on('chat', (data) => {
-        socket.broadcast.emit('chatMessage', { 
-            id: socket.id, 
+        const roomId = playerRooms[socket.id];
+        if (!roomId) return;
+        
+        // Emite só pra SALA
+        io.to(roomId).emit('chatMessage', {
+            id: socket.id,
             msg: data.msg,
             isDead: data.isDead || false
         });
     });
 
-    // 4. Eventos do Jogo (Start, Lanterna, Dano, etc)
-    // Incluindo: START_MATCH, TAKE_DAMAGE, PLAYER_DIED, SPAWN_CLONE, FLASHLIGHT_TOGGLE
+    // =============== EVENTO: GAME EVENT ===============
     socket.on('gameEvent', (payload) => {
-        // 🔦 IMPORTANTE: Adicionar o ID de quem enviou se não estiver no payload
+        const roomId = playerRooms[socket.id];
+        if (!roomId) return;
+        
         if (!payload.playerId) {
             payload.playerId = socket.id;
         }
-        socket.broadcast.emit('gameEvent', payload);
+        
+        // Emite pra TODA A SALA
+        io.to(roomId).emit('gameEvent', payload);
     });
 
-    // 🎭 Mudança de Skin (disfarce do Hunter)
-    // O servidor só retransmite qual skin o jogador está usando
-    // NÃO revela se é Hunter ou Alien - todos veem igual
+    // =============== EVENTO: SKIN CHANGE ===============
     socket.on('skinChange', (data) => {
-        socket.broadcast.emit('skinChange', {
+        const roomId = playerRooms[socket.id];
+        if (!roomId) return;
+        
+        io.to(roomId).emit('skinChange', {
             id: socket.id,
             skinId: data.skinId
         });
     });
 
-    // 5. Tchau
+    // =============== EVENTO: DISCONNECT ===============
     socket.on('disconnect', () => {
-        console.log('Jogador saiu:', socket.id);
-        delete players[socket.id];
-        io.emit('playerDisconnected', socket.id);
+        const roomId = playerRooms[socket.id];
+        
+        if (roomId && rooms[roomId]) {
+            const room = rooms[roomId];
+            
+            // Remove player da sala
+            room.players = room.players.filter(p => p.id !== socket.id);
+            
+            console.log(`❌ Jogador saiu: ${socket.id} da sala ${room.name}`);
+            
+            // Se sala ficou vazia, deleta
+            if (room.players.length === 0) {
+                delete rooms[roomId];
+                console.log(`🗑️ Sala deletada: ${room.name}`);
+                updateRoomList();
+            } else {
+                // Avisa outros que alguém saiu
+                io.to(roomId).emit('playerDisconnected', socket.id);
+            }
+        }
+        
+        delete playerRooms[socket.id];
     });
 });
 
@@ -93,5 +244,5 @@ io.on('connection', (socket) => {
 // O Render injeta a porta automaticamente em process.env.PORT
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`SERVIDOR RODANDO NA PORTA ${PORT}`);
+    console.log(`🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
 });
