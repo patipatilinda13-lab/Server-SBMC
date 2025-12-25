@@ -32,6 +32,7 @@ function updateRoomList() {
             roomId: room.id,
             name: room.name,
             playerCount: room.players.length,
+            maxPlayers: 10, // ✅ Adicionado limite
             hasPassword: !!room.password,
             createdAt: room.createdAt
         }));
@@ -56,7 +57,7 @@ io.on('connection', (socket) => {
             id: roomId,
             name: roomName,
             password: password || null,
-            players: [{ id: socket.id, name: nickname }],
+            players: [{ id: socket.id, name: nickname || 'Desconhecido' }],
             createdAt: new Date()
         };
         
@@ -66,7 +67,7 @@ io.on('connection', (socket) => {
         // Socket entra na room do lado do servidor
         socket.join(roomId);
         
-        console.log(`✅ Sala criada: ${roomName} (${roomId}) por ${nickname}`);
+        console.log(`✅ Sala criada: ${roomName} (${roomId}) por ${nickname || 'Desconhecido'}`);
         console.log(`📊 Rooms agora:`, Object.keys(rooms));
         console.log(`📊 Room details:`, room);
         
@@ -92,25 +93,31 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Verifica senha
-        if (room.password && room.password !== password) {
+        // ✅ Verifica se a sala já está cheia (máximo 10 jogadores)
+        if (room.players.length >= 10) {
+            socket.emit('error', 'Sala Cheia (10/10)!');
+            return;
+        }
+        
+        // ✅ Verifica senha com conversão para string
+        if (room.password && String(room.password) !== String(password)) {
             socket.emit('error', 'Senha incorreta');
             return;
         }
         
         // Adiciona player à sala
-        room.players.push({ id: socket.id, name: nickname });
+        room.players.push({ id: socket.id, name: nickname || 'Desconhecido' });
         playerRooms[socket.id] = roomId;
         
         // Socket entra na room
         socket.join(roomId);
         
-        console.log(`✅ ${nickname} entrou na sala ${room.name}`);
+        console.log(`✅ ${nickname || 'Desconhecido'} entrou na sala ${room.name}`);
         
         // Avisa pra todos na sala que alguém entrou
         io.to(roomId).emit('playerJoined', {
             id: socket.id,
-            name: nickname
+            name: nickname || 'Desconhecido'
         });
         
         // Avisa o novo player quem já tá na sala
@@ -134,6 +141,7 @@ io.on('connection', (socket) => {
                 roomId: room.id,
                 name: room.name,
                 playerCount: room.players.length,
+                maxPlayers: 10, // ✅ Adicionado limite
                 hasPassword: !!room.password,
                 createdAt: room.createdAt
             }));
