@@ -27,7 +27,7 @@ function generateRoomId() {
 function updateRoomList() {
     // Emite lista de salas para TODOS os clientes
     const roomList = Object.values(rooms)
-        .filter(room => room.players.length > 0) // Só salas com players
+        .filter(room => room.players && room.players.length > 0) // Só salas com players
         .map(room => ({
             roomId: room.id,
             name: room.name,
@@ -35,6 +35,9 @@ function updateRoomList() {
             hasPassword: !!room.password,
             createdAt: room.createdAt
         }));
+    
+    console.log('📢 updateRoomList enviando:', roomList);
+    console.log('📊 Salas no servidor:', rooms);
     
     io.emit('roomList', roomList);
 }
@@ -45,6 +48,8 @@ io.on('connection', (socket) => {
 
     socket.on('createRoom', (data) => {
         const { roomName, password, nickname } = data;
+        
+        console.log('🎮 Recebido createRoom:', { roomName, password, nickname });
         
         const roomId = generateRoomId();
         const room = {
@@ -62,6 +67,8 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         
         console.log(`✅ Sala criada: ${roomName} (${roomId}) por ${nickname}`);
+        console.log(`📊 Rooms agora:`, Object.keys(rooms));
+        console.log(`📊 Room details:`, room);
         
         // Avisa o criador que entrou
         socket.emit('roomCreated', {
@@ -71,6 +78,7 @@ io.on('connection', (socket) => {
         });
         
         // Atualiza lista de salas para TODOS
+        console.log('📢 Chamando updateRoomList()');
         updateRoomList();
     });
 
@@ -118,8 +126,10 @@ io.on('connection', (socket) => {
 
     // =============== EVENTO: GET ROOMS ===============
     socket.on('getRooms', () => {
+        console.log('📋 Cliente pediu lista de salas, salas existentes:', Object.keys(rooms));
+        
         const roomList = Object.values(rooms)
-            .filter(room => room.players.length > 0)
+            .filter(room => room.players && room.players.length > 0)
             .map(room => ({
                 roomId: room.id,
                 name: room.name,
@@ -128,6 +138,7 @@ io.on('connection', (socket) => {
                 createdAt: room.createdAt
             }));
         
+        console.log('📋 Enviando lista de salas:', roomList);
         socket.emit('roomList', roomList);
     });
 
