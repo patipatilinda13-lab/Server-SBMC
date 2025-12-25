@@ -62,8 +62,12 @@ io.on('connection', (socket) => {
     });
 
     // 4. Eventos do Jogo (Start, Lanterna, Dano, etc)
-    // Incluindo: START_MATCH, TAKE_DAMAGE, PLAYER_DIED, SPAWN_CLONE
+    // Incluindo: START_MATCH, TAKE_DAMAGE, PLAYER_DIED, SPAWN_CLONE, FLASHLIGHT_TOGGLE
     socket.on('gameEvent', (payload) => {
+        // 🔦 IMPORTANTE: Adicionar o ID de quem enviou se não estiver no payload
+        if (!payload.playerId) {
+            payload.playerId = socket.id;
+        }
         socket.broadcast.emit('gameEvent', payload);
     });
 
