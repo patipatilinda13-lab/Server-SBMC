@@ -1,3 +1,5 @@
+// --- Tempo de jogo em segundos (6 minutos)
+const GAME_DURATION = 360; // 60 * 6 = 360 segundos
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -45,6 +47,23 @@ function updateRoomList() {
 
 // =============== EVENTO: CREATE ROOM ===============
 io.on('connection', (socket) => {
+
+        // --- INICIAR JOGO (com segurança) ---
+        socket.on('startGame', (roomId) => {
+            const room = rooms[roomId];
+            // SEGURANÇA NO SERVIDOR:
+            // Verifica se a sala existe E se quem pediu é o dono (host) E se o jogo já não começou
+            if (room && room.players[0] && room.players[0].id === socket.id && !room.gameStarted) {
+                console.log(`Iniciando jogo na sala ${roomId}...`);
+                room.gameStarted = true; // Trava a sala para não iniciar 2 vezes
+                room.timeLeft = GAME_DURATION;
+                io.to(roomId).emit('gameStart', {
+                    timeLeft: room.timeLeft,
+                    // ... outros dados ...
+                });
+                // Aqui você pode iniciar o loop do timer, se desejar
+            }
+        });
     console.log('🔌 Novo jogador conectado:', socket.id);
 
     socket.on('createRoom', (data) => {
