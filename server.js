@@ -93,12 +93,6 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // 🚫 NOVO BLOQUEIO: PARTIDA EM ANDAMENTO
-        if (room.inProgress) {
-            socket.emit('error', '🚫 Partida já iniciada! Espere acabar.');
-            return;
-        }
-        
         // ✅ Verifica se a sala já está cheia (máximo 10 jogadores)
         if (room.players.length >= 10) {
             socket.emit('error', 'Sala Cheia (10/10)!');
@@ -218,24 +212,6 @@ io.on('connection', (socket) => {
     socket.on('gameEvent', (payload) => {
         const roomId = playerRooms[socket.id];
         if (!roomId) return;
-        
-        // 🔒 TRAVA A SALA SE O JOGO COMEÇAR
-        if (payload.action === 'START_MATCH') {
-            if (rooms[roomId]) {
-                rooms[roomId].inProgress = true;
-                console.log(`🔒 Sala ${roomId} TRANCADA (Jogo Iniciou)`);
-                updateRoomList();
-            }
-        }
-        
-        // 🔓 DESTRAVA A SALA SE O JOGO ACABAR
-        if (payload.action === 'GAME_OVER' || payload.action === 'RETURNING_TO_LOBBY') {
-            if (rooms[roomId]) {
-                rooms[roomId].inProgress = false;
-                console.log(`🔓 Sala ${roomId} DESTRANCADA (Fim de Jogo)`);
-                updateRoomList();
-            }
-        }
         
         if (!payload.playerId) {
             payload.playerId = socket.id;
