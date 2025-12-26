@@ -29,21 +29,53 @@ function generateRoomId() {
 function updateRoomList() {
     // Emite lista de salas para TODOS os clientes
     const roomList = Object.values(rooms)
-        .filter(room => room.players && room.players.length > 0) // Só salas com players
+        .filter(room => {
+            // ✅ Validar que a sala tem players E que não é uma sala órfã
+            if (!room.players || room.players.length === 0) {
+                return false;
+            }
+            
+            // ✅ DUPLA VERIFICAÇÃO: Garantir que pelo menos 1 player na lista está realmente conectado
+            const hasConnectedPlayer = room.players.some(p => io.sockets.sockets.has(p.id));
+            if (!hasConnectedPlayer) {
+                console.warn(`⚠️ Sala órfã detectada (sem players conectados): ${room.name}`);
+                return false;
+            }
+            
+            return true;
+        })
         .map(room => ({
             roomId: room.id,
             name: room.name,
             playerCount: room.players.length,
-            maxPlayers: 10, // ✅ Adicionado limite
+            maxPlayers: 10,
             hasPassword: !!room.password,
             createdAt: room.createdAt
         }));
     
     console.log('📢 updateRoomList enviando:', roomList);
-    console.log('📊 Salas no servidor:', rooms);
+    console.log('📊 Salas no servidor:', Object.keys(rooms));
     
     io.emit('roomList', roomList);
 }
+
+// ✅ LIMPADOR PERIÓDICO DE SALAS VAZIAS (a cada 30 segundos)
+// Garante que salas órfãs sejam removidas mesmo se houver falha na desconexão
+setInterval(() => {
+    let cleaned = false;
+    for (const roomId in rooms) {
+        const room = rooms[roomId];
+        if (!room.players || room.players.length === 0) {
+            console.log(`🧹 Limpando sala vazia: ${room.name}`);
+            delete rooms[roomId];
+            cleaned = true;
+        }
+    }
+    if (cleaned) {
+        console.log('✅ Salas vazias limpas pelo scheduler');
+        updateRoomList();
+    }
+}, 30000); // A cada 30 segundos
 
 // =============== EVENTO: CREATE ROOM ===============
 io.on('connection', (socket) => {
@@ -160,13 +192,29 @@ io.on('connection', (socket) => {
     socket.on('getRooms', () => {
         console.log('📋 Cliente pediu lista de salas, salas existentes:', Object.keys(rooms));
         
+        // ✅ LIMPEZA RÁPIDA: Remover salas vazias antes de enviar
+        for (const roomId in rooms) {
+            const room = rooms[roomId];
+            // ✅ DUPLA VERIFICAÇÃO: Remover se vazia OU se nenhum player está conectado
+            if (!room.players || room.players.length === 0) {
+                console.log(`🧹 Removendo sala vazia ao enviar lista: ${room.name}`);
+                delete rooms[roomId];
+            } else {
+                const hasConnectedPlayer = room.players.some(p => io.sockets.sockets.has(p.id));
+                if (!hasConnectedPlayer) {
+                    console.warn(`🧹 Removendo sala órfã ao enviar lista (sem players conectados): ${room.name}`);
+                    delete rooms[roomId];
+                }
+            }
+        }
+        
         const roomList = Object.values(rooms)
             .filter(room => room.players && room.players.length > 0)
             .map(room => ({
                 roomId: room.id,
                 name: room.name,
                 playerCount: room.players.length,
-                maxPlayers: 10, // ✅ Adicionado limite
+                maxPlayers: 10,
                 hasPassword: !!room.password,
                 createdAt: room.createdAt
             }));
@@ -295,6 +343,8 @@ io.on('connection', (socket) => {
             } else {
                 // Avisa outros que alguém saiu
                 io.to(roomId).emit('playerDisconnected', socket.id);
+                // ✅ Atualizar lista mesmo quando alguém sai (não apenas quando vazia)
+                updateRoomList();
             }
         }
         
