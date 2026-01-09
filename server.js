@@ -130,12 +130,9 @@ io.on('connection', (socket) => {
             isHost: true  // 🔥 Quem criou é o Host
         });
         
-        // ⏰ DELAY: Aguarda 100ms para garantir que a sala está estável antes de broadcast
-        // Isso evita race conditions onde outros clientes pedem a lista antes da sala estar pronta
-        setTimeout(() => {
-            console.log('📢 (após delay) Chamando updateRoomList()');
-            updateRoomList();
-        }, 100);
+        // Atualiza lista de salas para TODOS
+        console.log('📢 Chamando updateRoomList()');
+        updateRoomList();
     });
 
     // =============== EVENTO: JOIN ROOM ===============
@@ -263,10 +260,6 @@ io.on('connection', (socket) => {
             player.y = data.y;
             player.z = data.z;
             player.ry = data.ry;
-            // Log apenas a cada 10 movimentos para não poluir
-            if (Math.random() > 0.9) {
-                console.log(`📡 Move recebido de ${socket.id.substring(0,4)}: (${data.x.toFixed(1)}, ${data.y.toFixed(1)}, ${data.z.toFixed(1)})`);
-            }
         }
         
         // Manda posição para TODA A SALA (menos pra você)
