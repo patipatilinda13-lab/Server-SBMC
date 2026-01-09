@@ -126,7 +126,8 @@ io.on('connection', (socket) => {
         socket.emit('roomCreated', {
             roomId: roomId,
             roomName: roomName,
-            players: room.players
+            players: room.players,
+            isHost: true  // 🔥 Quem criou é o Host
         });
         
         // Atualiza lista de salas para TODOS
@@ -325,30 +326,43 @@ io.on('connection', (socket) => {
 
     // =============== EVENTO: DISCONNECT ===============
     socket.on('disconnect', () => {
+        console.log(`❌ DISCONNECT: ${socket.id.substring(0,4)} saiu`);
         const roomId = playerRooms[socket.id];
         
         if (roomId && rooms[roomId]) {
             const room = rooms[roomId];
+            console.log(`📋 Sala antes de remover: ${room.players.length} players`);
+            console.log(`   Players: ${room.players.map(p => `${p.id.substring(0,4)} - ${p.name}`).join(', ')}`);
             
             // Remove player da sala
+            const beforeCount = room.players.length;
             room.players = room.players.filter(p => p.id !== socket.id);
+            const afterCount = room.players.length;
             
-            console.log(`❌ Jogador saiu: ${socket.id} da sala ${room.name}`);
+            if (beforeCount === afterCount) {
+                console.warn(`⚠️ Player ${socket.id.substring(0,4)} NÃO encontrado na sala (já removido?)`);
+            } else {
+                console.log(`✅ Player removido. Sala: ${beforeCount} → ${afterCount} players`);
+            }
             
             // Se sala ficou vazia, deleta
             if (room.players.length === 0) {
                 delete rooms[roomId];
-                console.log(`🗑️ Sala deletada: ${room.name}`);
+                console.log(`🗑️ Sala deletada (vazia): ${room.name}`);
                 updateRoomList();
             } else {
                 // Avisa outros que alguém saiu
                 io.to(roomId).emit('playerDisconnected', socket.id);
+                console.log(`📢 Broadcast playerDisconnected para sala ${room.name}`);
                 // ✅ Atualizar lista mesmo quando alguém sai (não apenas quando vazia)
                 updateRoomList();
             }
+        } else {
+            console.warn(`⚠️ Disconnect: roomId não encontrado para ${socket.id.substring(0,4)}`);
         }
         
         delete playerRooms[socket.id];
+        console.log(`✅ playerRooms[${socket.id.substring(0,4)}] deletado`);
     });
 });
 
