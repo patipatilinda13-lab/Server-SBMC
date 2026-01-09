@@ -130,9 +130,12 @@ io.on('connection', (socket) => {
             isHost: true  // 🔥 Quem criou é o Host
         });
         
-        // Atualiza lista de salas para TODOS
-        console.log('📢 Chamando updateRoomList()');
-        updateRoomList();
+        // ⏰ DELAY: Aguarda 100ms para garantir que a sala está estável antes de broadcast
+        // Isso evita race conditions onde outros clientes pedem a lista antes da sala estar pronta
+        setTimeout(() => {
+            console.log('📢 (após delay) Chamando updateRoomList()');
+            updateRoomList();
+        }, 100);
     });
 
     // =============== EVENTO: JOIN ROOM ===============
