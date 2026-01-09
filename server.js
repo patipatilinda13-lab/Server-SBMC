@@ -263,6 +263,10 @@ io.on('connection', (socket) => {
             player.y = data.y;
             player.z = data.z;
             player.ry = data.ry;
+            // Log apenas a cada 10 movimentos para não poluir
+            if (Math.random() > 0.9) {
+                console.log(`📡 Move recebido de ${socket.id.substring(0,4)}: (${data.x.toFixed(1)}, ${data.y.toFixed(1)}, ${data.z.toFixed(1)})`);
+            }
         }
         
         // Manda posição para TODA A SALA (menos pra você)
